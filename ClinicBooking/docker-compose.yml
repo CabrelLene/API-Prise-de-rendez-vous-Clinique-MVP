@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: clinicbooking_db
+    environment:
+      POSTGRES_USER: clinic
+      POSTGRES_PASSWORD: clinicpass
+      POSTGRES_DB: clinicbooking
+    ports:
+      - "5432:5432"
+    volumes:
+      - clinicbooking_pg:/var/lib/postgresql/data
+
+volumes:
+  clinicbooking_pg:
