@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "4pBDe2TdC3eHjCpo0Q+2xEOYnsyu7k1pb/pqeCugGpA=",
+  "Source": "ClinicBooking.Api",
+  "BasePath": "_content/ClinicBooking.Api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
