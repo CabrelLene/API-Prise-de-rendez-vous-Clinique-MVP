@@ -1,15 +1,35 @@
 services:
   db:
-    image: postgres:16
+    image: postgres:16-alpine
     container_name: clinicbooking-db
     environment:
       POSTGRES_DB: clinicbooking
-      POSTGRES_USER: clinic
-      POSTGRES_PASSWORD: clinicpass
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
       - clinicbooking_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d clinicbooking"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: ClinicBooking.Api/Dockerfile
+    container_name: clinicbooking-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: Host=db;Port=5432;Database=clinicbooking;Username=postgres;Password=postgres
+    ports:
+      - "8080:8080"
 
 volumes:
   clinicbooking_pgdata:
