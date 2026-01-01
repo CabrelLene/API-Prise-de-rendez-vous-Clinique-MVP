@@ -6,30 +6,31 @@ services:
       POSTGRES_DB: clinicbooking
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
     volumes:
       - clinicbooking_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d clinicbooking"]
       interval: 5s
-      timeout: 5s
-      retries: 10
+      timeout: 3s
+      retries: 20
 
   api:
     build:
       context: .
-      dockerfile: ClinicBooking.Api/Dockerfile
+      dockerfile: Dockerfile
     container_name: clinicbooking-api
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=clinicbooking;Username=postgres;Password=postgres"
+    ports:
+      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Default: Host=db;Port=5432;Database=clinicbooking;Username=postgres;Password=postgres
-    ports:
-      - "8080:8080"
+    restart: unless-stopped
 
 volumes:
   clinicbooking_pgdata:
