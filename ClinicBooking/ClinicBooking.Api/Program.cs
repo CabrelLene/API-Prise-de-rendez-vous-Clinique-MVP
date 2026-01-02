@@ -2,8 +2,8 @@
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
+using ClinicBooking.Api.Api.Middleware;
 using ClinicBooking.Api.Api.Options;
-using ClinicBooking.Api.ApiMiddleware;
 using ClinicBooking.Api.Application.Services;
 using ClinicBooking.Api.Application.Validators;
 using ClinicBooking.Api.Infrastructure.Data;
@@ -25,7 +25,7 @@ builder.Services.AddControllers()
         o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
-// ✅ Validation JSON propre (au lieu du ProblemDetails par défaut)
+// ✅ Validation JSON propre
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = context =>
@@ -46,7 +46,86 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
     };
 });
 
-// ===== Rate limiting (anti-abuse) + réponse JSON propre =====
+// ===== Options =====
+builder.Services.Configure<ApiKeyOptions>(
+    builder.Configuration.GetSection(ApiKeyOptions.SectionName)
+);
+builder.Services.Configure<AvailabilityOptions>(
+    builder.Configuration.GetSection(AvailabilityOptions.SectionName)
+);
+
+// ===== Swagger + API Key support =====
+var apiKeyHeaderName = builder.Configuration
+    .GetSection(ApiKeyOptions.SectionName)
+    .GetValue<string>("HeaderName") ?? "X-API-KEY";
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "ClinicBooking API", Version = "v1" });
+
+    c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.ApiKey,
+        Name = apiKeyHeaderName,
+        In = ParameterLocation.Header,
+        Description = $"API Key required. Put your key in {apiKeyHeaderName} header."
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "ApiKey"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+// ===== EF Core =====
+builder.Services.AddDbContext<ClinicDbContext>(opt =>
+{
+    var cs = builder.Configuration.GetConnectionString("Default");
+    opt.UseNpgsql(cs);
+});
+
+// ===== FluentValidation =====
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateAppointmentRequestValidator>();
+
+// ===== Business services =====
+builder.Services.AddScoped<AppointmentService>();
+
+// ===== Rate limiting (anti-bypass) + réponse JSON propre =====
+
+// clés autorisées (valides)
+var allowedKeys = builder.Configuration
+    .GetSection(ApiKeyOptions.SectionName)
+    .GetSection("Keys")
+    .Get<string[]>() ?? Array.Empty<string>();
+
+var allowedKeySet = new HashSet<string>(allowedKeys, StringComparer.Ordinal);
+
+// helpers
+static string GetClientIp(HttpContext ctx)
+    => ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+static string? GetProvidedApiKey(HttpContext ctx, string headerName)
+{
+    if (!ctx.Request.Headers.TryGetValue(headerName, out var v)) return null;
+    var s = v.ToString();
+    return string.IsNullOrWhiteSpace(s) ? null : s;
+}
+
+static bool IsSwagger(HttpContext ctx)
+    => ctx.Request.Path.StartsWithSegments("/swagger");
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -71,109 +150,89 @@ builder.Services.AddRateLimiter(options =>
         }, cancellationToken: ct);
     };
 
-    // 60 req / minute par API Key (global)
-    options.AddPolicy("apikey-60rpm", httpContext =>
+    // ✅ Global 60 req/min (clé valide => par clé, sinon => par IP)
+    options.AddPolicy("apikey-60rpm", ctx =>
     {
-        var key = httpContext.Request.Headers["X-API-KEY"].ToString();
-        if (string.IsNullOrWhiteSpace(key)) key = "anonymous";
+        // Swagger pas limité (dev-friendly)
+        if (IsSwagger(ctx))
+            return RateLimitPartition.GetNoLimiter("swagger");
 
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: key,
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 60,
-                Window = TimeSpan.FromMinutes(1),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
-            });
-    });
+        var provided = GetProvidedApiKey(ctx, apiKeyHeaderName);
 
-    // 10 req / minute par API Key pour /appointments
-    options.AddPolicy("appointments-10rpm", httpContext =>
-    {
-        var key = httpContext.Request.Headers["X-API-KEY"].ToString();
-        if (string.IsNullOrWhiteSpace(key)) key = "anonymous";
-
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"appointments:{key}",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 10,
-                Window = TimeSpan.FromMinutes(1),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
-            });
-    });
-});
-
-// ===== Swagger + API Key support =====
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "ClinicBooking API", Version = "v1" });
-
-    c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
-    {
-        Type = SecuritySchemeType.ApiKey,
-        Name = "X-API-KEY",
-        In = ParameterLocation.Header,
-        Description = "API Key required. Put your key in X-API-KEY header."
-    });
-
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
+        // clé valide => partition par KEY (pas de contournement)
+        if (provided is not null && allowedKeySet.Contains(provided))
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: $"global:key:{provided}",
+                factory: _ => new FixedWindowRateLimiterOptions
                 {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "ApiKey"
-                }
-            },
-            Array.Empty<string>()
+                    PermitLimit = 60,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                });
         }
+
+        // clé absente/invalide => partition par IP
+        var ip = GetClientIp(ctx);
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"global:ip:{ip}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60, // tu peux descendre à 30 si tu veux être plus strict sur les invalides
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+
+    // ✅ 10 req/min pour /appointments (clé valide => par key, sinon => par IP)
+    options.AddPolicy("appointments-10rpm", ctx =>
+    {
+        var provided = GetProvidedApiKey(ctx, apiKeyHeaderName);
+
+        if (provided is not null && allowedKeySet.Contains(provided))
+        {
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: $"appointments:key:{provided}",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                });
+        }
+
+        var ip = GetClientIp(ctx);
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"appointments:ip:{ip}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10, // tu peux descendre à 5 si tu veux punir plus fort les invalides
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
     });
 });
-
-// ===== EF Core =====
-builder.Services.AddDbContext<ClinicDbContext>(opt =>
-{
-    var cs = builder.Configuration.GetConnectionString("Default");
-    opt.UseNpgsql(cs);
-});
-
-// ===== FluentValidation =====
-builder.Services.AddFluentValidationAutoValidation();
-builder.Services.AddValidatorsFromAssemblyContaining<CreateAppointmentRequestValidator>();
-
-// ===== Business services =====
-builder.Services.AddScoped<AppointmentService>();
-
-// ===== Options =====
-builder.Services.Configure<ApiKeyOptions>(
-    builder.Configuration.GetSection(ApiKeyOptions.SectionName)
-);
-builder.Services.Configure<AvailabilityOptions>(
-    builder.Configuration.GetSection(AvailabilityOptions.SectionName)
-);
 
 var app = builder.Build();
 
-// ✅ Global JSON errors (doit être très tôt)
+// ✅ Global JSON errors (très tôt)
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// Swagger
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// ✅ Rate limit avant la protection API key
 app.UseRateLimiter();
 
-// API Key
-app.UseMiddleware<ApiKeyMiddleware>();
+// Auth API Key
+app.UseMiddleware<ClinicBooking.Api.Api.Middleware.ApiKeyMiddleware>();
 
-app.MapControllers();
+
+// ✅ Applique le 60rpm à TOUTES les routes/controllers
+app.MapControllers().RequireRateLimiting("apikey-60rpm");
 
 // Seed DB
 using (var scope = app.Services.CreateScope())

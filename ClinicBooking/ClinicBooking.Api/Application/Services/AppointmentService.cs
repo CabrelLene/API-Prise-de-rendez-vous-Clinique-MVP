@@ -1,3 +1,4 @@
+// Application/Services/AppointmentService.cs
 using ClinicBooking.Api.Api.Options;
 using ClinicBooking.Api.Contracts;
 using ClinicBooking.Api.Domain.Entities;
@@ -18,6 +19,75 @@ public class AppointmentService
     {
         _db = db;
         _availability = availabilityOptions.Value;
+    }
+
+    // ✅ GET by id
+    public async Task<Appointment> GetByIdAsync(Guid appointmentId, CancellationToken ct = default)
+    {
+        var appt = await _db.Appointments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == appointmentId, ct);
+
+        if (appt is null)
+            throw new InvalidOperationException("Rendez-vous introuvable.");
+
+        return appt;
+    }
+
+    // ✅ LIST + filtres + pagination
+    // status attendu: "Scheduled" | "Cancelled" | "Completed" (case-insensitive)
+    public async Task<PagedResult<Appointment>> ListAsync(
+        Guid? patientId,
+        Guid? practitionerId,
+        DateTime? fromUtc,
+        DateTime? toUtc,
+        string? status,
+        int page = 1,
+        int pageSize = 25,
+        CancellationToken ct = default)
+    {
+        // garde-fous
+        if (page <= 0) page = 1;
+        if (pageSize <= 0) pageSize = 25;
+        if (pageSize > 200) pageSize = 200;
+
+        if (fromUtc.HasValue && toUtc.HasValue && toUtc.Value <= fromUtc.Value)
+            throw new InvalidOperationException("toUtc doit être après fromUtc.");
+
+        var q = _db.Appointments
+            .AsNoTracking()
+            .AsQueryable();
+
+        if (patientId.HasValue)
+            q = q.Where(a => a.PatientId == patientId.Value);
+
+        if (practitionerId.HasValue)
+            q = q.Where(a => a.PractitionerId == practitionerId.Value);
+
+        // fenêtre temporelle (overlap)
+        if (fromUtc.HasValue)
+            q = q.Where(a => a.EndUtc > fromUtc.Value);
+
+        if (toUtc.HasValue)
+            q = q.Where(a => a.StartUtc < toUtc.Value);
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            if (!Enum.TryParse<AppointmentStatus>(status.Trim(), ignoreCase: true, out var parsed))
+                throw new InvalidOperationException($"Status invalide: {status}");
+
+            q = q.Where(a => a.Status == parsed);
+        }
+
+        var total = await q.LongCountAsync(ct);
+
+        var items = await q
+            .OrderByDescending(a => a.CreatedAtUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return new PagedResult<Appointment>(page, pageSize, total, items);
     }
 
     public async Task<Appointment> CreateAsync(CreateAppointmentRequest req, CancellationToken ct = default)
@@ -263,7 +333,11 @@ public class AppointmentService
     private static HashSet<DayOfWeek> ParseWorkingDays(IReadOnlyList<string>? days)
     {
         if (days is null || days.Count == 0)
-            return new HashSet<DayOfWeek> { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
+            return new HashSet<DayOfWeek>
+            {
+                DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
+                DayOfWeek.Thursday, DayOfWeek.Friday
+            };
 
         var set = new HashSet<DayOfWeek>();
         foreach (var s in days)

@@ -15,6 +15,7 @@ public class AppointmentsController : ControllerBase
 
     public AppointmentsController(AppointmentService service) => _service = service;
 
+    // ✅ POST /appointments
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateAppointmentRequest req, CancellationToken ct)
     {
@@ -36,7 +37,7 @@ public class AppointmentsController : ControllerBase
         }
     }
 
-    // PATCH /appointments/{id}/cancel
+    // ✅ PATCH /appointments/{id}/cancel
     [HttpPatch("{id:guid}/cancel")]
     public async Task<IActionResult> Cancel([FromRoute] Guid id, CancellationToken ct)
     {
@@ -44,6 +45,59 @@ public class AppointmentsController : ControllerBase
         {
             var updated = await _service.CancelAsync(id, ct);
             return Ok(updated);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("introuvable", StringComparison.OrdinalIgnoreCase))
+                return NotFound(new { code = "NOT_FOUND", message = ex.Message });
+
+            return BadRequest(new { code = "BAD_REQUEST", message = ex.Message });
+        }
+    }
+
+    // ✅ GET /appointments/{id}
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetById([FromRoute] Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var appt = await _service.GetByIdAsync(id, ct);
+            return Ok(appt);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("introuvable", StringComparison.OrdinalIgnoreCase))
+                return NotFound(new { code = "NOT_FOUND", message = ex.Message });
+
+            return BadRequest(new { code = "BAD_REQUEST", message = ex.Message });
+        }
+    }
+
+    // ✅ GET /appointments?patientId=&practitionerId=&fromUtc=&toUtc=&status=&page=&pageSize=
+    [HttpGet]
+    public async Task<IActionResult> List(
+        [FromQuery] Guid? patientId,
+        [FromQuery] Guid? practitionerId,
+        [FromQuery] DateTime? fromUtc,
+        [FromQuery] DateTime? toUtc,
+        [FromQuery] string? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await _service.ListAsync(
+                patientId,
+                practitionerId,
+                fromUtc,
+                toUtc,
+                status,
+                page,
+                pageSize,
+                ct);
+
+            return Ok(result);
         }
         catch (InvalidOperationException ex)
         {
