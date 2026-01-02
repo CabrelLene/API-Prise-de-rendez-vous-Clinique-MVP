@@ -102,17 +102,25 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateAppointmentRequestVal
 // ===== Business services =====
 builder.Services.AddScoped<AppointmentService>();
 
-// ===== Rate limiting (anti-bypass) + réponse JSON propre =====
+// ===== Rate limiting (anti-bypass + réponse JSON propre) =====
 
-// clés autorisées (valides)
+// Support "ApiKey:Keys": ["a","b"] + fallback "ApiKey:Key": "a"
 var allowedKeys = builder.Configuration
     .GetSection(ApiKeyOptions.SectionName)
     .GetSection("Keys")
-    .Get<string[]>() ?? Array.Empty<string>();
+    .Get<string[]>();
+
+if (allowedKeys is null || allowedKeys.Length == 0)
+{
+    var single = builder.Configuration
+        .GetSection(ApiKeyOptions.SectionName)
+        .GetValue<string>("Key");
+
+    allowedKeys = string.IsNullOrWhiteSpace(single) ? Array.Empty<string>() : new[] { single };
+}
 
 var allowedKeySet = new HashSet<string>(allowedKeys, StringComparer.Ordinal);
 
-// helpers
 static string GetClientIp(HttpContext ctx)
     => ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
@@ -150,20 +158,17 @@ builder.Services.AddRateLimiter(options =>
         }, cancellationToken: ct);
     };
 
-    // ✅ Global 60 req/min (clé valide => par clé, sinon => par IP)
-    options.AddPolicy("apikey-60rpm", ctx =>
+    // ✅ Global limiter : clé valide => par KEY (60/min), sinon => par IP (30/min)
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
     {
-        // Swagger pas limité (dev-friendly)
-        if (IsSwagger(ctx))
-            return RateLimitPartition.GetNoLimiter("swagger");
+        if (IsSwagger(ctx)) return RateLimitPartition.GetNoLimiter("swagger");
 
         var provided = GetProvidedApiKey(ctx, apiKeyHeaderName);
 
-        // clé valide => partition par KEY (pas de contournement)
         if (provided is not null && allowedKeySet.Contains(provided))
         {
             return RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: $"global:key:{provided}",
+                partitionKey: $"key:{provided}",
                 factory: _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = 60,
@@ -173,20 +178,19 @@ builder.Services.AddRateLimiter(options =>
                 });
         }
 
-        // clé absente/invalide => partition par IP
         var ip = GetClientIp(ctx);
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"global:ip:{ip}",
+            partitionKey: $"ip:{ip}",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 60, // tu peux descendre à 30 si tu veux être plus strict sur les invalides
+                PermitLimit = 30,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
             });
     });
 
-    // ✅ 10 req/min pour /appointments (clé valide => par key, sinon => par IP)
+    // ✅ Endpoint policy : /appointments => clé valide 10/min, sinon IP 5/min
     options.AddPolicy("appointments-10rpm", ctx =>
     {
         var provided = GetProvidedApiKey(ctx, apiKeyHeaderName);
@@ -209,7 +213,7 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: $"appointments:ip:{ip}",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10, // tu peux descendre à 5 si tu veux punir plus fort les invalides
+                PermitLimit = 5,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
@@ -225,14 +229,16 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSwagger();
 app.UseSwaggerUI();
 
+// ✅ IMPORTANT : routing avant rate limiter pour que [EnableRateLimiting] marche
+app.UseRouting();
+
+// ✅ Rate limiter AVANT ApiKeyMiddleware (pour throttler les abus)
 app.UseRateLimiter();
 
-// Auth API Key
-app.UseMiddleware<ClinicBooking.Api.Api.Middleware.ApiKeyMiddleware>();
+// ✅ Auth API Key
+app.UseMiddleware<ApiKeyMiddleware>();
 
-
-// ✅ Applique le 60rpm à TOUTES les routes/controllers
-app.MapControllers().RequireRateLimiting("apikey-60rpm");
+app.MapControllers();
 
 // Seed DB
 using (var scope = app.Services.CreateScope())

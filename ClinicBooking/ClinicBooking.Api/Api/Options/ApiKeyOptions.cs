@@ -6,9 +6,6 @@ public sealed class ApiKeyOptions
 
     public string HeaderName { get; set; } = "X-API-KEY";
 
-    // ✅ nouveau: plusieurs clés
+    // ✅ support multi-keys
     public string[] Keys { get; set; } = Array.Empty<string>();
-
-    // ✅ compat (si tu avais encore "Key" dans un env)
-    public string? Key { get; set; }
 }
