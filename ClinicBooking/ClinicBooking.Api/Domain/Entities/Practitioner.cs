@@ -7,4 +7,6 @@ public class Practitioner
     public string Specialty { get; set; } = default!;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+
+    public List<Appointment> Appointments { get; set; } = new();
 }

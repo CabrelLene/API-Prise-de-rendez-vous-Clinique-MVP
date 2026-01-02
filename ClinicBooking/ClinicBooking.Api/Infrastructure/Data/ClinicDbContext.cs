@@ -51,38 +51,43 @@ public class ClinicDbContext : DbContext
         });
 
         // ===== Appointment =====
-        modelBuilder.Entity<Appointment>(e =>
-        {
-            e.HasKey(x => x.Id);
+modelBuilder.Entity<Appointment>(e =>
+{
+    e.HasKey(x => x.Id);
 
-            e.Property(x => x.Status)
-                .IsRequired()
-                .HasConversion<string>(); // "Status" en text
+    e.Property(x => x.Status)
+        .IsRequired()
+        .HasConversion<string>();
 
-            e.Property(x => x.Notes);
+    e.Property(x => x.Notes);
 
-            // FK + DeleteBehavior RESTRICT (fiabilité historique)
-            e.HasOne<Patient>()
-                .WithMany()
-                .HasForeignKey(x => x.PatientId)
-                .OnDelete(DeleteBehavior.Restrict);
+    e.Property(x => x.StartUtc).IsRequired();
+    e.Property(x => x.EndUtc).IsRequired();
 
-            e.HasOne<Practitioner>()
-                .WithMany()
-                .HasForeignKey(x => x.PractitionerId)
-                .OnDelete(DeleteBehavior.Restrict);
+    // ✅ RELATIONS EXPLICITES (anti PatientId1 / PractitionerId1)
+    e.HasOne(x => x.Patient)
+        .WithMany(p => p.Appointments)
+        .HasForeignKey(x => x.PatientId)
+        .OnDelete(DeleteBehavior.Restrict);
 
-            // Index utile pour recherches / règles anti-chevauchement côté service
-            e.HasIndex(x => new { x.PractitionerId, x.StartUtc, x.EndUtc });
-            e.HasIndex(x => x.PatientId);
+    e.HasOne(x => x.Practitioner)
+        .WithMany(p => p.Appointments)
+        .HasForeignKey(x => x.PractitionerId)
+        .OnDelete(DeleteBehavior.Restrict);
 
-            // Optionnel mais propre: "EndUtc > StartUtc" au niveau DB
-            // (Postgres supporte les check constraints)
-            e.ToTable(t => t.HasCheckConstraint(
-                "CK_Appointments_EndAfterStart",
-                "\"EndUtc\" > \"StartUtc\""
-            ));
-        });
+    // Index utile
+    e.HasIndex(x => new { x.PractitionerId, x.StartUtc, x.EndUtc })
+        .HasDatabaseName("IX_Appointments_PractitionerId_StartUtc_EndUtc");
+
+    e.HasIndex(x => x.PatientId)
+        .HasDatabaseName("IX_Appointments_PatientId");
+
+    // Check constraint DB
+    e.ToTable(t => t.HasCheckConstraint(
+        "CK_Appointments_EndAfterStart",
+        "\"EndUtc\" > \"StartUtc\""
+    ));
+});
 
         base.OnModelCreating(modelBuilder);
     }

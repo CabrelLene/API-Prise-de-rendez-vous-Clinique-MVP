@@ -7,4 +7,6 @@ public class Patient
     public string? Email { get; set; }
     public string? Phone { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+
+    public List<Appointment> Appointments { get; set; } = new();
 }

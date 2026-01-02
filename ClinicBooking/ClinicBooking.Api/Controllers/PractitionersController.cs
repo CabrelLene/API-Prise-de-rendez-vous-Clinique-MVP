@@ -1,25 +1,28 @@
-using ClinicBooking.Api.Infrastructure.Data;
+// Controllers/PractitionersController.cs
+using ClinicBooking.Api.Application.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ClinicBooking.Api.Controllers;
 
 [ApiController]
-[Route("api/practitioners")]
+[Route("practitioners")]
+[EnableRateLimiting("apikey-60rpm")]
 public class PractitionersController : ControllerBase
 {
-    private readonly ClinicDbContext _db;
+    private readonly AppointmentService _service;
 
-    public PractitionersController(ClinicDbContext db) => _db = db;
+    public PractitionersController(AppointmentService service) => _service = service;
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
+    // GET /practitioners/{id}/availability?fromDate=2026-01-02&toDate=2026-01-07
+    [HttpGet("{id:guid}/availability")]
+    public async Task<IActionResult> GetAvailabilityPro(
+        [FromRoute] Guid id,
+        [FromQuery] DateOnly fromDate,
+        [FromQuery] DateOnly toDate,
+        CancellationToken ct = default)
     {
-        var practitioners = await _db.Practitioners
-            .OrderBy(p => p.FullName)
-            .Select(p => new { p.Id, p.FullName, p.Specialty, p.IsActive, p.CreatedAtUtc })
-            .ToListAsync(ct);
-
-        return Ok(practitioners);
+        var result = await _service.GetAvailabilityProAsync(id, fromDate, toDate, ct);
+        return Ok(result);
     }
 }

@@ -1,12 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "TNcOE7uFdaE=",
+  "dgSpecHash": "H/Uwy7lx8jw=",
   "success": true,
   "projectFilePath": "C:\\Users\\LE DUC\\OneDrive\\Documents\\projets Github\\API-Prise-de-rendez-vous-Clinique-MVP\\API-Prise-de-rendez-vous-Clinique-MVP\\ClinicBooking\\ClinicBooking.Api\\ClinicBooking.Api.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\LE DUC\\.nuget\\packages\\fluentvalidation\\11.11.0\\fluentvalidation.11.11.0.nupkg.sha512",
+    "C:\\Users\\LE DUC\\.nuget\\packages\\fluentvalidation\\12.1.1\\fluentvalidation.12.1.1.nupkg.sha512",
     "C:\\Users\\LE DUC\\.nuget\\packages\\fluentvalidation.aspnetcore\\11.3.1\\fluentvalidation.aspnetcore.11.3.1.nupkg.sha512",
-    "C:\\Users\\LE DUC\\.nuget\\packages\\fluentvalidation.dependencyinjectionextensions\\11.11.0\\fluentvalidation.dependencyinjectionextensions.11.11.0.nupkg.sha512",
+    "C:\\Users\\LE DUC\\.nuget\\packages\\fluentvalidation.dependencyinjectionextensions\\12.1.1\\fluentvalidation.dependencyinjectionextensions.12.1.1.nupkg.sha512",
     "C:\\Users\\LE DUC\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
     "C:\\Users\\LE DUC\\.nuget\\packages\\microsoft.aspnetcore.openapi\\8.0.5\\microsoft.aspnetcore.openapi.8.0.5.nupkg.sha512",
     "C:\\Users\\LE DUC\\.nuget\\packages\\microsoft.bcl.asyncinterfaces\\6.0.0\\microsoft.bcl.asyncinterfaces.6.0.0.nupkg.sha512",

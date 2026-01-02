@@ -3,6 +3,7 @@ using System;
 using ClinicBooking.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ClinicBooking.Api.Migrations
 {
     [DbContext(typeof(ClinicDbContext))]
-    partial class ClinicDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260101135510_RemoveShadowForeignKeys")]
+    partial class RemoveShadowForeignKeys
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -40,7 +43,13 @@ namespace ClinicBooking.Api.Migrations
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("PatientId1")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("PractitionerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PractitionerId1")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("StartUtc")
@@ -52,11 +61,13 @@ namespace ClinicBooking.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PatientId")
-                        .HasDatabaseName("IX_Appointments_PatientId");
+                    b.HasIndex("PatientId");
 
-                    b.HasIndex("PractitionerId", "StartUtc", "EndUtc")
-                        .HasDatabaseName("IX_Appointments_PractitionerId_StartUtc_EndUtc");
+                    b.HasIndex("PatientId1");
+
+                    b.HasIndex("PractitionerId1");
+
+                    b.HasIndex("PractitionerId", "StartUtc", "EndUtc");
 
                     b.ToTable("Appointments", t =>
                         {
@@ -124,31 +135,29 @@ namespace ClinicBooking.Api.Migrations
 
             modelBuilder.Entity("ClinicBooking.Api.Domain.Entities.Appointment", b =>
                 {
-                    b.HasOne("ClinicBooking.Api.Domain.Entities.Patient", "Patient")
-                        .WithMany("Appointments")
+                    b.HasOne("ClinicBooking.Api.Domain.Entities.Patient", null)
+                        .WithMany()
                         .HasForeignKey("PatientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("ClinicBooking.Api.Domain.Entities.Practitioner", "Practitioner")
-                        .WithMany("Appointments")
+                    b.HasOne("ClinicBooking.Api.Domain.Entities.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId1");
+
+                    b.HasOne("ClinicBooking.Api.Domain.Entities.Practitioner", null)
+                        .WithMany()
                         .HasForeignKey("PractitionerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ClinicBooking.Api.Domain.Entities.Practitioner", "Practitioner")
+                        .WithMany()
+                        .HasForeignKey("PractitionerId1");
+
                     b.Navigation("Patient");
 
                     b.Navigation("Practitioner");
-                });
-
-            modelBuilder.Entity("ClinicBooking.Api.Domain.Entities.Patient", b =>
-                {
-                    b.Navigation("Appointments");
-                });
-
-            modelBuilder.Entity("ClinicBooking.Api.Domain.Entities.Practitioner", b =>
-                {
-                    b.Navigation("Appointments");
                 });
 #pragma warning restore 612, 618
         }
