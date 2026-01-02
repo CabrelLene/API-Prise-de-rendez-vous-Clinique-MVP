@@ -1,3 +1,5 @@
+// Program.cs
+using System.Net;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
@@ -7,7 +9,7 @@ using ClinicBooking.Api.Application.Services;
 using ClinicBooking.Api.Application.Validators;
 using ClinicBooking.Api.Infrastructure.Data;
 
-using FluentValidation;
+using FluentValidation;                 // ✅ IMPORTANT
 using FluentValidation.AspNetCore;
 
 using Microsoft.AspNetCore.HttpOverrides;
@@ -53,19 +55,6 @@ builder.Services.Configure<ApiKeyOptions>(
 builder.Services.Configure<AvailabilityOptions>(
     builder.Configuration.GetSection(AvailabilityOptions.SectionName)
 );
-
-// ✅ Forwarded headers (derrière proxy / load balancer)
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders =
-        ForwardedHeaders.XForwardedFor |
-        ForwardedHeaders.XForwardedProto;
-
-    // ⚠️ PROD: idéalement, configure KnownProxies / KnownNetworks (sinon spoof possible).
-    // Ici on clear pour que ça marche derrière proxy sans config additionnelle.
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
-});
 
 // Pour Swagger + extraction header
 var apiKeyHeaderName = builder.Configuration
@@ -126,7 +115,45 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateAppointmentRequestVal
 // ===== Business services =====
 builder.Services.AddScoped<AppointmentService>();
 
-// ===== Rate limiting (post-auth: par KEY) + réponse JSON propre =====
+// ===== ForwardedHeaders (proxy/LB) =====
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    options.ForwardLimit = builder.Configuration.GetSection("ForwardedHeaders").GetValue<int?>("ForwardLimit") ?? 2;
+
+    if (builder.Environment.IsDevelopment())
+    {
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+        return;
+    }
+
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+
+    var proxies = builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? Array.Empty<string>();
+    foreach (var p in proxies)
+    {
+        if (IPAddress.TryParse(p, out var ip))
+            options.KnownProxies.Add(ip);
+    }
+
+    var networks = builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? Array.Empty<string>();
+    foreach (var n in networks)
+    {
+        var parts = n.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 2) continue;
+
+        if (!IPAddress.TryParse(parts[0], out var prefix)) continue;
+        if (!int.TryParse(parts[1], out var prefixLen)) continue;
+
+        // ✅ FIX ambiguité IPNetwork
+        options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefix, prefixLen));
+    }
+});
+
+// ===== Rate limiting + réponse JSON propre =====
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -151,8 +178,6 @@ builder.Services.AddRateLimiter(options =>
         }, cancellationToken: ct);
     };
 
-    // ✅ Global limiter (s'applique à tout) : 60 req/min par API Key
-    // IMPORTANT: ne casse pas les policies endpoint (ex: appointments-10rpm)
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
     {
         if (IsSwagger(ctx)) return RateLimitPartition.GetNoLimiter("swagger");
@@ -171,7 +196,6 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
-    // ✅ Policy spécifique /appointments : 10 req/min par API Key
     options.AddPolicy("appointments-10rpm", ctx =>
     {
         if (IsSwagger(ctx)) return RateLimitPartition.GetNoLimiter("swagger");
@@ -193,35 +217,28 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
-// ✅ Forwarded headers DOIT être tout en haut du pipeline (avant IP-based logic)
 app.UseForwardedHeaders();
 
-// ✅ Global JSON errors (très tôt)
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// ✅ Pré-auth anti-bypass (invalid/missing => rate limit IP)
 app.UseMiddleware<PreAuthRateLimitMiddleware>();
 
-// ✅ Auth API key
 app.UseMiddleware<ApiKeyMiddleware>();
 
-// ✅ Rate limiter (global + endpoint policies)
 app.UseRateLimiter();
 
-// ✅ IMPORTANT : ne mets PAS RequireRateLimiting ici (sinon tu écrases appointments-10rpm)
 app.MapControllers();
 
-// Seed DB
-using (var scope = app.Services.CreateScope())
+if (!app.Environment.IsEnvironment("Testing"))
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ClinicDbContext>();
     await DbSeeder.SeedAsync(db);
 }
 
 app.Run();
 
-// ✅ pour WebApplicationFactory<Program> (tests)
 public partial class Program { }

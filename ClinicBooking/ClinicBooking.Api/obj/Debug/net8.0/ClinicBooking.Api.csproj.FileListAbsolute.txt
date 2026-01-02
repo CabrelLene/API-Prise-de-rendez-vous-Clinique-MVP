@@ -1,5 +1,6 @@
 C:\Users\LE DUC\OneDrive\Documents\projets Github\API-Prise-de-rendez-vous-Clinique-MVP\API-Prise-de-rendez-vous-Clinique-MVP\ClinicBooking\ClinicBooking.Api\bin\Debug\net8.0\appsettings.Development.json
 C:\Users\LE DUC\OneDrive\Documents\projets Github\API-Prise-de-rendez-vous-Clinique-MVP\API-Prise-de-rendez-vous-Clinique-MVP\ClinicBooking\ClinicBooking.Api\bin\Debug\net8.0\appsettings.json
+C:\Users\LE DUC\OneDrive\Documents\projets Github\API-Prise-de-rendez-vous-Clinique-MVP\API-Prise-de-rendez-vous-Clinique-MVP\ClinicBooking\ClinicBooking.Api\bin\Debug\net8.0\appsettings.Production.json
 C:\Users\LE DUC\OneDrive\Documents\projets Github\API-Prise-de-rendez-vous-Clinique-MVP\API-Prise-de-rendez-vous-Clinique-MVP\ClinicBooking\ClinicBooking.Api\bin\Debug\net8.0\ClinicBooking.Api.exe
 C:\Users\LE DUC\OneDrive\Documents\projets Github\API-Prise-de-rendez-vous-Clinique-MVP\API-Prise-de-rendez-vous-Clinique-MVP\ClinicBooking\ClinicBooking.Api\bin\Debug\net8.0\ClinicBooking.Api.deps.json
 C:\Users\LE DUC\OneDrive\Documents\projets Github\API-Prise-de-rendez-vous-Clinique-MVP\API-Prise-de-rendez-vous-Clinique-MVP\ClinicBooking\ClinicBooking.Api\bin\Debug\net8.0\ClinicBooking.Api.runtimeconfig.json
