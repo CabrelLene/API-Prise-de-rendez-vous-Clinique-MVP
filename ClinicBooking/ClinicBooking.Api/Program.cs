@@ -1,4 +1,3 @@
-// Program.cs
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
@@ -11,6 +10,7 @@ using ClinicBooking.Api.Infrastructure.Data;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -54,11 +54,35 @@ builder.Services.Configure<AvailabilityOptions>(
     builder.Configuration.GetSection(AvailabilityOptions.SectionName)
 );
 
-// ===== Swagger + API Key support =====
+// ✅ Forwarded headers (derrière proxy / load balancer)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto;
+
+    // ⚠️ PROD: idéalement, configure KnownProxies / KnownNetworks (sinon spoof possible).
+    // Ici on clear pour que ça marche derrière proxy sans config additionnelle.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// Pour Swagger + extraction header
 var apiKeyHeaderName = builder.Configuration
     .GetSection(ApiKeyOptions.SectionName)
     .GetValue<string>("HeaderName") ?? "X-API-KEY";
 
+static string? GetProvidedApiKey(HttpContext ctx, string headerName)
+{
+    if (!ctx.Request.Headers.TryGetValue(headerName, out var v)) return null;
+    var s = v.ToString();
+    return string.IsNullOrWhiteSpace(s) ? null : s;
+}
+
+static bool IsSwagger(HttpContext ctx)
+    => ctx.Request.Path.StartsWithSegments("/swagger");
+
+// ===== Swagger + API Key support =====
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -102,38 +126,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateAppointmentRequestVal
 // ===== Business services =====
 builder.Services.AddScoped<AppointmentService>();
 
-// ===== Rate limiting (anti-bypass + réponse JSON propre) =====
-
-// Support "ApiKey:Keys": ["a","b"] + fallback "ApiKey:Key": "a"
-var allowedKeys = builder.Configuration
-    .GetSection(ApiKeyOptions.SectionName)
-    .GetSection("Keys")
-    .Get<string[]>();
-
-if (allowedKeys is null || allowedKeys.Length == 0)
-{
-    var single = builder.Configuration
-        .GetSection(ApiKeyOptions.SectionName)
-        .GetValue<string>("Key");
-
-    allowedKeys = string.IsNullOrWhiteSpace(single) ? Array.Empty<string>() : new[] { single };
-}
-
-var allowedKeySet = new HashSet<string>(allowedKeys, StringComparer.Ordinal);
-
-static string GetClientIp(HttpContext ctx)
-    => ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-
-static string? GetProvidedApiKey(HttpContext ctx, string headerName)
-{
-    if (!ctx.Request.Headers.TryGetValue(headerName, out var v)) return null;
-    var s = v.ToString();
-    return string.IsNullOrWhiteSpace(s) ? null : s;
-}
-
-static bool IsSwagger(HttpContext ctx)
-    => ctx.Request.Path.StartsWithSegments("/swagger");
-
+// ===== Rate limiting (post-auth: par KEY) + réponse JSON propre =====
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -158,70 +151,50 @@ builder.Services.AddRateLimiter(options =>
         }, cancellationToken: ct);
     };
 
-    // ✅ Global limiter : clé valide => par KEY (60/min), sinon => par IP (30/min)
+    // ✅ Global limiter (s'applique à tout) : 60 req/min par API Key
+    // IMPORTANT: ne casse pas les policies endpoint (ex: appointments-10rpm)
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
     {
         if (IsSwagger(ctx)) return RateLimitPartition.GetNoLimiter("swagger");
 
-        var provided = GetProvidedApiKey(ctx, apiKeyHeaderName);
+        var key = GetProvidedApiKey(ctx, apiKeyHeaderName) ?? "anonymous";
 
-        if (provided is not null && allowedKeySet.Contains(provided))
-        {
-            return RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: $"key:{provided}",
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 60,
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                    QueueLimit = 0
-                });
-        }
-
-        var ip = GetClientIp(ctx);
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"ip:{ip}",
+            partitionKey: $"key:{key}",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 30,
+                PermitLimit = 60,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
+                QueueLimit = 0,
+                AutoReplenishment = true
             });
     });
 
-    // ✅ Endpoint policy : /appointments => clé valide 10/min, sinon IP 5/min
+    // ✅ Policy spécifique /appointments : 10 req/min par API Key
     options.AddPolicy("appointments-10rpm", ctx =>
     {
-        var provided = GetProvidedApiKey(ctx, apiKeyHeaderName);
+        if (IsSwagger(ctx)) return RateLimitPartition.GetNoLimiter("swagger");
 
-        if (provided is not null && allowedKeySet.Contains(provided))
-        {
-            return RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: $"appointments:key:{provided}",
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 10,
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                    QueueLimit = 0
-                });
-        }
+        var key = GetProvidedApiKey(ctx, apiKeyHeaderName) ?? "anonymous";
 
-        var ip = GetClientIp(ctx);
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"appointments:ip:{ip}",
+            partitionKey: $"appointments:key:{key}",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 5,
+                PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
+                QueueLimit = 0,
+                AutoReplenishment = true
             });
     });
 });
 
 var app = builder.Build();
+
+// ✅ Forwarded headers DOIT être tout en haut du pipeline (avant IP-based logic)
+app.UseForwardedHeaders();
 
 // ✅ Global JSON errors (très tôt)
 app.UseMiddleware<ExceptionHandlingMiddleware>();
@@ -229,15 +202,16 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// ✅ IMPORTANT : routing avant rate limiter pour que [EnableRateLimiting] marche
-app.UseRouting();
+// ✅ Pré-auth anti-bypass (invalid/missing => rate limit IP)
+app.UseMiddleware<PreAuthRateLimitMiddleware>();
 
-// ✅ Rate limiter AVANT ApiKeyMiddleware (pour throttler les abus)
-app.UseRateLimiter();
-
-// ✅ Auth API Key
+// ✅ Auth API key
 app.UseMiddleware<ApiKeyMiddleware>();
 
+// ✅ Rate limiter (global + endpoint policies)
+app.UseRateLimiter();
+
+// ✅ IMPORTANT : ne mets PAS RequireRateLimiting ici (sinon tu écrases appointments-10rpm)
 app.MapControllers();
 
 // Seed DB
@@ -248,3 +222,6 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+// ✅ pour WebApplicationFactory<Program> (tests)
+public partial class Program { }

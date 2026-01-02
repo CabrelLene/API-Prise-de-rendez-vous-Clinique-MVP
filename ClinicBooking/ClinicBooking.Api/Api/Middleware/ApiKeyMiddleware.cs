@@ -7,45 +7,58 @@ public sealed class ApiKeyMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ApiKeyOptions _opt;
-    private readonly HashSet<string> _allowed;
+    private readonly HashSet<string> _allowedKeys;
 
     public ApiKeyMiddleware(RequestDelegate next, IOptions<ApiKeyOptions> opt)
     {
         _next = next;
         _opt = opt.Value;
 
-        _allowed = new HashSet<string>(_opt.Keys ?? Array.Empty<string>(), StringComparer.Ordinal);
+        _allowedKeys = new HashSet<string>(_opt.Keys ?? Array.Empty<string>(), StringComparer.Ordinal);
     }
 
     public async Task Invoke(HttpContext ctx)
     {
-        // Swagger ouvert (DEV-friendly)
+        // Swagger ouvert en DEV
         if (ctx.Request.Path.StartsWithSegments("/swagger"))
         {
             await _next(ctx);
             return;
         }
 
-        if (_allowed.Count == 0)
+        // Si aucune clé configurée => 500 (config bug)
+        if (_allowedKeys.Count == 0)
         {
             ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
             await ctx.Response.WriteAsJsonAsync(new
             {
                 code = "API_KEY_NOT_CONFIGURED",
-                message = "Aucune API key configurée côté serveur."
+                message = "Aucune API key n'est configurée côté serveur."
             });
             return;
         }
 
-        if (!ctx.Request.Headers.TryGetValue(_opt.HeaderName, out var provided) ||
-            string.IsNullOrWhiteSpace(provided) ||
-            !_allowed.Contains(provided.ToString()))
+        // Header manquant => 401
+        if (!ctx.Request.Headers.TryGetValue(_opt.HeaderName, out var providedRaw))
         {
+            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await ctx.Response.WriteAsJsonAsync(new
+            {
+                code = "API_KEY_MISSING",
+                message = $"API Key manquante. Header attendu: {_opt.HeaderName}"
+            });
+            return;
+        }
+
+        var provided = providedRaw.ToString();
+        if (string.IsNullOrWhiteSpace(provided) || !_allowedKeys.Contains(provided))
+        {
+            // Clé présente mais invalide => 403
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
             await ctx.Response.WriteAsJsonAsync(new
             {
                 code = "API_KEY_INVALID",
-                message = $"API key invalide. Header attendu: {_opt.HeaderName}"
+                message = "API key invalide."
             });
             return;
         }

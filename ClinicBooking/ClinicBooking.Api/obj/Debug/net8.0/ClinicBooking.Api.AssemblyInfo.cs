@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ClinicBooking.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e5a790f6832ab634979da569010dd50a8e617092")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+278a91db4de34539645bd3553c00280c239947ff")]
 [assembly: System.Reflection.AssemblyProductAttribute("ClinicBooking.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ClinicBooking.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -158,17 +158,17 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
-            "FluentAssertions": {
+            "Microsoft.AspNetCore.Mvc.Testing": {
               "target": "Package",
-              "version": "[8.8.0, )"
+              "version": "[8.0.8, )"
+            },
+            "Microsoft.EntityFrameworkCore.InMemory": {
+              "target": "Package",
+              "version": "[8.0.8, )"
             },
             "Microsoft.NET.Test.Sdk": {
               "target": "Package",
-              "version": "[17.12.0, )"
-            },
-            "coverlet.collector": {
-              "target": "Package",
-              "version": "[6.0.2, )"
+              "version": "[17.11.1, )"
             },
             "xunit": {
               "target": "Package",
