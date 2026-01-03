@@ -1,3 +1,5 @@
+![CI](https://github.com/CabrelLene/<API-Prise-de-rendez-vous-Clinique-MVP/actions/workflows/ci.yml/badge.svg)
+
 # ClinicBooking API (MVP) — Prise de rendez-vous clinique
 
 API REST en .NET 8 + PostgreSQL (EF Core) pour gérer des rendez-vous de clinique, avec :
