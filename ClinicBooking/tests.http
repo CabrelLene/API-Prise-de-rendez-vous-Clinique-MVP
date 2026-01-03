@@ -1,0 +1,36 @@
+### Public - root
+GET http://localhost:5228/
+Accept: application/json
+
+### Public - health
+GET http://localhost:5228/health
+Accept: application/json
+
+### Public - version
+GET http://localhost:5228/version
+Accept: application/json
+
+### Protected - appointments (should be 401 without key)
+GET http://localhost:5228/appointments?page=1&pageSize=1
+Accept: application/json
+
+@baseUrl = https://api-prise-de-rendez-vous-clinique-mvp.onrender.com
+
+### Public - root (Render)
+GET {{baseUrl}}/
+Accept: application/json
+
+### Public - health (Render)
+GET {{baseUrl}}/health
+Accept: application/json
+
+### Public - version (Render)
+GET {{baseUrl}}/version
+Accept: application/json
+
+@apiKey = {{$processEnv API_KEY}}
+
+### Protected - appointments (Render, needs key)
+GET {{baseUrl}}/appointments?page=1&pageSize=1
+Accept: application/json
+X-API-KEY: {{apiKey}}

@@ -19,8 +19,9 @@ public sealed class ApiKeyMiddleware
 
     public async Task Invoke(HttpContext ctx)
     {
-        // Swagger ouvert en DEV
-        if (ctx.Request.Path.StartsWithSegments("/swagger"))
+        // ✅ Endpoints publics (portfolio-friendly) + Swagger
+        // (ces routes doivent répondre même sans API key)
+        if (IsPublicEndpoint(ctx) || IsSwagger(ctx))
         {
             await _next(ctx);
             return;
@@ -64,5 +65,14 @@ public sealed class ApiKeyMiddleware
         }
 
         await _next(ctx);
+    }
+
+    private static bool IsSwagger(HttpContext ctx)
+        => ctx.Request.Path.StartsWithSegments("/swagger");
+
+    private static bool IsPublicEndpoint(HttpContext ctx)
+    {
+        var p = ctx.Request.Path.Value ?? "";
+        return p == "/" || p.StartsWith("/health") || p.StartsWith("/version");
     }
 }
