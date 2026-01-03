@@ -1,0 +1,13 @@
+```http
+### Public - root
+GET http://localhost:5228/
+
+### Public - health
+GET http://localhost:5228/health
+
+### Protected - appointments (missing key)
+GET http://localhost:5228/appointments?page=1&pageSize=1
+
+### Protected - appointments (with key)
+GET http://localhost:5228/appointments?page=1&pageSize=1
+X-API-KEY: dev-secret-123

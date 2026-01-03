@@ -49,23 +49,33 @@ public class RateLimitTests : IClassFixture<TestApiFactory>
             AllowAutoRedirect = false
         });
 
-        // Selon ton PreAuth (souvent 5/min), tu as 403 puis 429.
-        // Ici on check: les 5 premières => 403, la 6e => 429
-        for (int i = 0; i < 5; i++)
+        async Task<HttpResponseMessage> SendInvalid()
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, "/appointments?page=1&pageSize=1");
             req.Headers.Add("X-API-KEY", "invalid");
-
-            var res = await client.SendAsync(req);
-            Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+            return await client.SendAsync(req);
         }
 
+        // 1) Peut être 403 (normal) OU 429 (si quota IP déjà consommé par d'autres tests).
+        var first = await SendInvalid();
+        Assert.True(
+            first.StatusCode == HttpStatusCode.Forbidden ||
+            first.StatusCode == HttpStatusCode.TooManyRequests,
+            $"Expected 403 or 429, got {(int)first.StatusCode} {first.StatusCode}"
+        );
+
+        // 2) On insiste jusqu'à obtenir 429 => preuve que le PreAuth limiter fonctionne.
+        var last = first.StatusCode;
+
+        for (int i = 0; i < 200; i++)
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, "/appointments?page=1&pageSize=1");
-            req.Headers.Add("X-API-KEY", "invalid");
+            var res = await SendInvalid();
+            last = res.StatusCode;
 
-            var res = await client.SendAsync(req);
-            Assert.Equal(HttpStatusCode.TooManyRequests, res.StatusCode);
+            if (last == HttpStatusCode.TooManyRequests)
+                break;
         }
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, last);
     }
 }

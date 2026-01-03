@@ -1,54 +1,28 @@
-# ClinicBooking API (MVP) — .NET 8 + PostgreSQL (Neon) + Render
+# ClinicBooking API (MVP) — .NET 8 + PostgreSQL + Render
 
-API de prise de rendez-vous pour une clinique (MVP) avec :
-- Auth par **API Key** (`X-API-KEY`)
-- **Rate limiting** (pré-auth + global + policy)
-- PostgreSQL (Neon / Supabase)
-- Swagger (docs)
-- Endpoints publics: `/`, `/health`, `/version`
+API de prise de rendez-vous pour clinique (MVP) construite en **ASP.NET Core (.NET 8)**, **EF Core**, **PostgreSQL (Neon)**, déployée sur **Render**.
+Objectif : démontrer une API propre, documentée, avec auth minimale, rate limit, et endpoints de health pour un portfolio.
 
-## Démo (Render)
-Base URL: https://api-prise-de-rendez-vous-clinique-mvp.onrender.com
+## ✅ Live
+- Base URL (prod) : https://api-prise-de-rendez-vous-clinique-mvp.onrender.com
+- Swagger : `/swagger`
+- Endpoints publics :
+  - `GET /` (infos)
+  - `GET /health` (healthcheck)
+  - `GET /version` (env + commit si Render)
 
-Endpoints publics (pas de clé):
-- GET `/`
-- GET `/health`
-- GET `/version`
+## 🔐 Sécurité (minimaliste mais sérieuse)
+- **API Key obligatoire** sur les endpoints métiers (ex: `/appointments`)
+- Header attendu : `X-API-KEY`
+- Rate limiting (anti-abus)
+- Gestion d’erreurs JSON uniforme
 
-Endpoints protégés (clé requise):
-- GET `/appointments?page=1&pageSize=10`
-- ... (ajoute ceux que tu as)
+> ⚠️ L’API Key n’est pas une “auth utilisateur”. C’est une protection simple pour un MVP et un portfolio.  
+> Pour du production-grade : OAuth/JWT + rôles + audit + rotation des clés.
 
----
-
-## Sécurité (minimal mais sérieux)
-- Toutes les routes métier exigent `X-API-KEY`
-- Les endpoints publics sont limités à: `/`, `/health`, `/version`
-- Rate limit:
-  - Clé invalide => **429** après un certain volume
-  - Clé valide => quotas distincts
-- Erreurs JSON normalisées (`code`, `message`, `errors`...)
-
-> ⚠️ Ne jamais commit une vraie clé ni une vraie connection string.
-
----
-
-## Prérequis
-- .NET SDK 8
-- Une base PostgreSQL (local ou Neon)
-
----
-
-## Configuration (variables d’environnement)
-
-### Option A — Local + DB Neon (recommandé pour être identique à prod)
-Définir :
-- `ConnectionStrings__Default` = connection string Npgsql (format **Host=...;Username=...;Password=...;Ssl Mode=Require;...**)
-- `ApiKey__HeaderName` = `X-API-KEY` (optionnel)
-- `ApiKey__Keys__0` = ta clé locale (ex: `dev-secret-123`)
-- `ApiKey__Keys__1` = autre clé (optionnel)
-
-#### Git Bash (Windows)
+## 🧪 Quick tests (curl)
+### 1) Vérifier que le service répond (public)
 ```bash
-export ConnectionStrings__Default="Host=...;Database=...;Username=...;Password=...;Ssl Mode=Require;"
-export ApiKey__Keys__0="dev-secret-123"
+curl -i "https://api-prise-de-rendez-vous-clinique-mvp.onrender.com/"
+curl -i "https://api-prise-de-rendez-vous-clinique-mvp.onrender.com/health"
+curl -i "https://api-prise-de-rendez-vous-clinique-mvp.onrender.com/version"
