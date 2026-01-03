@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("f0aa12bf-dfed-43cd-850e-276a5148d7a2")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("ClinicBooking.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+733ea6c69bf4deb30b0bcdb0f483edf4a879131c")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7b90b0808b434db67267d0d2be05e8618e49d1e8")]
 [assembly: System.Reflection.AssemblyProductAttribute("ClinicBooking.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ClinicBooking.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
