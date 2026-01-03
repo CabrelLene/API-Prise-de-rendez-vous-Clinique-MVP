@@ -1,28 +1,63 @@
-# ClinicBooking API (MVP) — .NET 8 + PostgreSQL + Render
+# ClinicBooking API (MVP) — Prise de rendez-vous clinique
 
-API de prise de rendez-vous pour clinique (MVP) construite en **ASP.NET Core (.NET 8)**, **EF Core**, **PostgreSQL (Neon)**, déployée sur **Render**.
-Objectif : démontrer une API propre, documentée, avec auth minimale, rate limit, et endpoints de health pour un portfolio.
+API REST en .NET 8 + PostgreSQL (EF Core) pour gérer des rendez-vous de clinique, avec :
+- **API Key auth** (header `X-API-KEY`)
+- **Rate limiting** (global + policy endpoints sensibles)
+- **Migrations EF Core** + seed contrôlé
+- **Endpoints publics** (portfolio-friendly) : `/`, `/health`, `/version`
+- **Swagger** pour la doc interactive
+- **Tests xUnit** (smoke + rate limit) + CI GitHub Actions (optionnel mais recommandé)
 
-## ✅ Live
-- Base URL (prod) : https://api-prise-de-rendez-vous-clinique-mvp.onrender.com
-- Swagger : `/swagger`
-- Endpoints publics :
-  - `GET /` (infos)
-  - `GET /health` (healthcheck)
-  - `GET /version` (env + commit si Render)
+## ✅ Live (Render)
+Base URL :
+- `https://api-prise-de-rendez-vous-clinique-mvp.onrender.com`
 
-## 🔐 Sécurité (minimaliste mais sérieuse)
-- **API Key obligatoire** sur les endpoints métiers (ex: `/appointments`)
-- Header attendu : `X-API-KEY`
-- Rate limiting (anti-abus)
-- Gestion d’erreurs JSON uniforme
+Endpoints publics (sans clé) :
+- `GET /`
+- `GET /health`
+- `GET /version`
 
-> ⚠️ L’API Key n’est pas une “auth utilisateur”. C’est une protection simple pour un MVP et un portfolio.  
-> Pour du production-grade : OAuth/JWT + rôles + audit + rotation des clés.
+Swagger :
+- `GET /swagger`
 
-## 🧪 Quick tests (curl)
-### 1) Vérifier que le service répond (public)
+> Les endpoints métiers (ex: `/appointments`) nécessitent une API Key.
+
+---
+
+## 🔐 Auth — API Key
+
+Header attendu :
+- `X-API-KEY: <YOUR_KEY>`
+
+Erreurs possibles :
+- `401 API_KEY_MISSING` : header absent
+- `403 API_KEY_INVALID` : header présent mais clé invalide
+- `429 RATE_LIMITED` : trop de requêtes
+
+---
+
+## ⚡ Rate limiting (résumé)
+- Global : limite “raisonnable” par clé
+- Policy `appointments-10rpm` : 10 requêtes/minute (exemple)
+- PreAuth limiter (anti-abus) : limite IP même si la clé est invalide/absente
+
+Objectif : empêcher un spam basique sans complexifier le MVP.
+
+---
+
+## 🚀 Quickstart (local)
+
+### Prérequis
+- .NET SDK 8
+- PostgreSQL (option 1) ou une DB distante (option 2)
+
+### 1) Configuration (appsettings.json)
+Par défaut, le projet contient :
+- `ApiKey.Keys`: `dev-secret-123`, `dev-secret-456`
+- ConnectionString locale : `Host=localhost;Port=5432;Database=clinicbooking;Username=clinic;Password=clinicpass`
+
+### 2) Lancer l’API
+Depuis la racine `ClinicBooking/` :
+
 ```bash
-curl -i "https://api-prise-de-rendez-vous-clinique-mvp.onrender.com/"
-curl -i "https://api-prise-de-rendez-vous-clinique-mvp.onrender.com/health"
-curl -i "https://api-prise-de-rendez-vous-clinique-mvp.onrender.com/version"
+dotnet run --project ClinicBooking.Api
