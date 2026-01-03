@@ -71,6 +71,13 @@ static string? GetProvidedApiKey(HttpContext ctx, string headerName)
 static bool IsSwagger(HttpContext ctx)
     => ctx.Request.Path.StartsWithSegments("/swagger");
 
+// ✅ Endpoints publics (portfolio-friendly)
+static bool IsPublicEndpoint(HttpContext ctx)
+{
+    var p = ctx.Request.Path.Value ?? "";
+    return p == "/" || p.StartsWith("/health") || p.StartsWith("/version");
+}
+
 // ===== Swagger + API Key support =====
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -180,7 +187,8 @@ builder.Services.AddRateLimiter(options =>
 
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
     {
-        if (IsSwagger(ctx)) return RateLimitPartition.GetNoLimiter("swagger");
+        // ✅ ne limite pas swagger / endpoints publics
+        if (IsSwagger(ctx) || IsPublicEndpoint(ctx)) return RateLimitPartition.GetNoLimiter("public");
 
         var key = GetProvidedApiKey(ctx, apiKeyHeaderName) ?? "anonymous";
 
@@ -198,7 +206,8 @@ builder.Services.AddRateLimiter(options =>
 
     options.AddPolicy("appointments-10rpm", ctx =>
     {
-        if (IsSwagger(ctx)) return RateLimitPartition.GetNoLimiter("swagger");
+        // ✅ ne limite pas swagger / endpoints publics
+        if (IsSwagger(ctx) || IsPublicEndpoint(ctx)) return RateLimitPartition.GetNoLimiter("public");
 
         var key = GetProvidedApiKey(ctx, apiKeyHeaderName) ?? "anonymous";
 
@@ -216,6 +225,29 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+// ✅ Endpoints publics AVANT middlewares (sinon ApiKeyMiddleware bloque)
+app.MapGet("/", () => Results.Ok(new
+{
+    name = "ClinicBooking API",
+    status = "ok",
+    docs = "/swagger",
+    health = "/health",
+    version = "/version"
+}));
+
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "healthy",
+    utc = DateTime.UtcNow
+}));
+
+app.MapGet("/version", () => Results.Ok(new
+{
+    environment = app.Environment.EnvironmentName,
+    commit = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? "local",
+    utc = DateTime.UtcNow
+}));
 
 app.UseForwardedHeaders();
 
