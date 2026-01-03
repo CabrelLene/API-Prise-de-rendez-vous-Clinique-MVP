@@ -47,7 +47,7 @@ Objectif : empêcher un spam basique sans complexifier le MVP.
 
 ---
 
-## 🚀 Quickstart (local)
+##  Quickstart (local)
 
 ### Prérequis
 - .NET SDK 8
@@ -63,3 +63,12 @@ Depuis la racine `ClinicBooking/` :
 
 ```bash
 dotnet run --project ClinicBooking.Api
+
+##VERSION
+https://api-prise-de-rendez-vous-clinique-mvp.onrender.com/version
+####Health check
+https://api-prise-de-rendez-vous-clinique-mvp.onrender.com/health
+##Live API (racine)
+https://api-prise-de-rendez-vous-clinique-mvp.onrender.com/
+##Swagger / Docs
+https://api-prise-de-rendez-vous-clinique-mvp.onrender.com/swagger
